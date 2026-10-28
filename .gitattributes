@@ -1,0 +1,2 @@
+data/CEU/Beacon_164.txt filter=lfs diff=lfs merge=lfs -text
+data/CEU/MAF.txt filter=lfs diff=lfs merge=lfs -text
