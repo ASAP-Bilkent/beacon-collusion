@@ -1,5 +1,4 @@
-results/*
-!results/beacon_size_idrate_gated.csv
+results
 images
 agents
 logs
@@ -8,4 +7,3 @@ dataset
 __pycache__/
 *.py[cod]
 .DS_Store
-data/
