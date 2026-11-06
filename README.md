@@ -12,10 +12,9 @@ Defenses: Random response flipping, Baseline MAF-threshold suppression,
 Strategic discriminative-power suppression, and GBD, the learned per-query
 policy.
 
-Every account runs the released GBA attacker policy unchanged and GBD is the
-released defender checkpoint, both from
-[ciceklab/beacon-defense-strategies](https://github.com/ciceklab/beacon-defense-strategies).
-Only the distribution of that fixed policy across accounts varies.
+Every account runs the same pre-trained GBA attacker policy and GBD is the
+pre-trained defender checkpoint, both in `weights/`. Only the distribution of
+that fixed policy across accounts varies.
 
 ## Setup
 
@@ -29,30 +28,24 @@ swap `pytorch-cuda=11.8` for `cpuonly` first.
 
 ## Data
 
-The CEU HapMap data is the same as the base paper's and is not duplicated here.
-It is on Git LFS in that repository:
+`data/CEU/` holds the CEU HapMap cohort used in the paper: 164 individuals over
+the 100,000 SNPs the experiments evaluate, taken in the dataset's original
+ordering and then sorted by ascending MAF at load time. `Beacon_164.txt` is the
+genotype table, `reference.pickle` the homozygous-major reference used to turn
+it into a binary carrier matrix, and `MAF.txt` the allele frequencies.
 
-```bash
-git lfs install
-git clone https://github.com/ciceklab/beacon-defense-strategies.git
-cd beacon-defense-strategies && git lfs pull && cd ..
-cp -r beacon-defense-strategies/data ./data
-```
-
-That gives `data/CEU/` with `Beacon_164.txt`, `MAF.txt` and `reference.pickle`.
-Experiments use the first 100,000 SNPs in the file's original order, sorted by
-ascending MAF. The first run caches the parsed genotype matrix to
-`binary_cache_CEU.joblib`.
+The first run caches the parsed matrix to `binary_cache_CEU.joblib`. Delete that
+file if you change the contents of `data/CEU`.
 
 ## Running the experiments
 
 Each driver calls `eval_collusion.py` once per cell and writes one
-`eval_results.npy` per cell. Re-running skips cells that are already done.
-Drivers set `DEBUG_COLLUSION_CONTINUE=1` and `BEACON_BINARY=0` themselves, so
-episodes run the full budget and responses are continuous. Set `BEACON_PY` to
-pick the interpreter for the workers.
+`eval_results.npy` per cell under `results/`. Re-running skips cells that are
+already done. Drivers set `DEBUG_COLLUSION_CONTINUE=1` and `BEACON_BINARY=0`
+themselves, so episodes run the full budget and responses are continuous. Set
+`BEACON_PY` to pick the interpreter for the workers.
 
-### Figure 2
+### Main experiment
 
 N = 40, 400 episodes, seeds 1-3, 100 queries per account, k in {1,2,3,5,7,10},
 member and non-member arms.
@@ -61,39 +54,16 @@ member and non-member arms.
 python3 run_gbd_fpr.py          # 156 cells -> results/gbd_fpr
 python3 run_heuristic_fpr.py    # 468 cells -> results/heuristic_fpr
 python3 run_scaled_control.py   #  30 cells -> results/scaled_control
-python3 plot_fig2.py --style revised
 ```
 
-Output is `results/fig2_rebuilt_revised.png`.
-
-`run_scaled_control.py` gives panel F, the single account spending the whole kB
-budget, for GBD. The three heuristic lines in that panel come from
-`results/s2g_ref`, produced the same way with `--beacon_type` changed; without
-those cells the panel draws the GBD line only.
+`run_scaled_control.py` is the budget-matched control: one account spending the
+coalition's whole kB budget, at 200, 300, 500, 700 and 1000 queries. Budget 100,
+the k = 1 point, comes from `results/gbd_fpr/single_k1_*`.
 
 `run_heuristic_fpr.py` reads `HF_EPISODES`, `HF_SEEDS`, `HF_DEFENSES` and
 `HF_PARALLEL` from the environment for shorter runs.
 
-### Supplementary Figure S1, partition geometry
-
-```bash
-python3 plot_partitions.py
-```
-
-Self-contained, needs neither the data nor any runs. Writes
-`results/fig_partitions.png`.
-
-### Supplementary Figure S2, query efficiency
-
-```bash
-python3 plot_fig3_queries.py
-```
-
-Mean queries to identification over successful episodes. Reads the Figure 2
-cells, so run those drivers first. Writes
-`results/fig3_avg_queries_4panel.png`.
-
-### Supplementary Figures S3 to S5, beacon size
+### Beacon size
 
 N = 63 is the largest the 164-person panel allows once the victim and both
 50-person control sets are reserved.
@@ -107,26 +77,9 @@ python3 run_beacon_size.py \
     --n_episodes 400 --jobs 8 --out ./results/beacon_size_gated
 ```
 
-1,080 cells. Each worker holds the genotype matrix, roughly 5 GB, so keep
-`jobs x 5 GB` under available RAM. The N = 63 block alone is 360 cells and took
-about 21 hours at `--jobs 36`.
-
-`results/beacon_size_idrate_gated.csv` holds the summarised result of that
-sweep, one row per cell: beacon size, defense, strategy, k, seed,
-identification rate, episode count, majority-voting flag. The rate is each run's
-own decision flag, so S1 keeps its majority rule and S2a to S2d keep the any-one
-rule; nothing is re-scored. The figures come straight from it, so they can be
-redrawn without repeating the sweep:
-
-```bash
-python3 plot_beacon_size_idrate.py \
-    --rates ./results/beacon_size_idrate_gated.csv \
-    --sizes 10 20 63 --paper --prefix fig_beacon_size \
-    --outdir ./results/beacon_size_idrate
-```
-
-Writes `fig_beacon_size_perstrategy_N{10,20,63}.png`, which are Figures S3, S4
-and S5.
+1,080 cells. Each worker holds the genotype matrix, so keep `--jobs` within
+available RAM. The N = 63 block alone is 360 cells and took about 21 hours at
+`--jobs 36`.
 
 ## Single cell
 
@@ -144,6 +97,9 @@ DEBUG_COLLUSION_CONTINUE=1 BEACON_BINARY=0 python3 eval_collusion.py \
     --log_scores --results_dir ./results/example_cell
 ```
 
+Each cell stores per-episode identification flags, query counts and, with
+`--log_scores`, the LRT trajectories.
+
 Four flags change the numbers materially:
 
 - `--presence_aware_response` applies the defense only where some member carries
@@ -156,15 +112,14 @@ Four flags change the numbers materially:
 - `--calibrated_null` draws the target from the control pool, giving the
   non-member arm.
 
+The strategy flags are `--majority_voting` (S1), `--random_partitioning` (S2a),
+`--k_partitioning` (S2b), `--maf_specialization` (S2c) and
+`--strided_partitioning` (S2d). Passing none of them gives a single account.
+
 The beacon, both control sets and one spare slot must fit in the 164-person
 panel, so `beacon_size <= 164 - 1 - a_control_size - b_control_size`, which is
 63 at the defaults. A configuration that does not fit raises an error rather
 than silently shrinking the control sets.
-
-## Not included
-
-Raw evaluation output is about 1.8 GB, so `results/` is ignored apart from the
-CSV above. The data is about 2.2 GB and comes from the base repository.
 
 ## License
 
