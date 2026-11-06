@@ -1,4 +1,5 @@
-results
+results/*
+!results/beacon_size_idrate_gated.csv
 images
 agents
 logs
