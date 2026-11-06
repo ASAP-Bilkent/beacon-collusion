@@ -1415,17 +1415,31 @@ class Env():
         return self.step(attacker_agent=attacker_agent)
 
     def get_populations(self):
-        # print("-------------------------")
-        if 1 + self.args.a_control_size + self.args.b_control_size + self.args.beacon_size > 164:
-            # raise Exception("Size of the population is too low!")
-            pass # Suppress for synthetic data scenarios
-        
+        n_panel = self.binary.shape[0]
+        required = (1 + self.args.a_control_size + self.args.b_control_size
+                    + self.args.beacon_size)
+        if required > n_panel:
+            raise ValueError(
+                f"Panel too small: beacon_size={self.args.beacon_size} + "
+                f"b_control_size={self.args.b_control_size} + "
+                f"a_control_size={self.args.a_control_size} + 1 spare slot "
+                f"= {required} > {n_panel} individuals available"
+            )
+
         beacon_size = self.args.beacon_size + 1
         all_people = self.binary
 
         beacon_case = all_people[:beacon_size]
         beacon_control = all_people[beacon_size:beacon_size + self.args.b_control_size]
         attack_control = all_people[beacon_size + self.args.b_control_size:beacon_size + self.args.b_control_size + self.args.a_control_size]
+
+        if (len(beacon_control) != self.args.b_control_size
+                or len(attack_control) != self.args.a_control_size):
+            raise ValueError(
+                f"Control sets truncated: defense {len(beacon_control)}/"
+                f"{self.args.b_control_size}, attacker {len(attack_control)}/"
+                f"{self.args.a_control_size}"
+            )
 
         if self.args.evaluate:
             # --- FIX: Modulo arithmetic to prevent IndexError if episodes > population ---

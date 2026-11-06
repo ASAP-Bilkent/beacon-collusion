@@ -55,7 +55,7 @@ def set_seed(seed: int):
 # Data Loading
 # ---------------------------------------------------------------------------
 def load_data(data_path: str, gene_size: int):
-    cache_path = "./binary_cache.joblib"
+    cache_path = f"./binary_cache_{os.path.basename(os.path.normpath(data_path))}.joblib"
     if os.path.exists(cache_path):
         print("Loading cached genomic data...")
         binary = joblib.load(cache_path)
@@ -87,8 +87,15 @@ def load_data(data_path: str, gene_size: int):
     maf["maf"] = np.round(maf["maf"].values, 3)
     maf_values = maf["maf"].values
 
-    if binary.shape[0] != 164 and binary.shape[1] == 164:
+    if binary.shape[0] == len(maf_values) and binary.shape[1] != len(maf_values):
         binary = binary.T
+
+    if binary.shape[1] != len(maf_values):
+        raise ValueError(
+            f"Genotype matrix and MAF table disagree: {binary.shape[1]} SNPs "
+            f"vs {len(maf_values)} MAF entries. Check that {cache_path} was "
+            f"built from {data_path}."
+        )
 
     print(f"Data shape: {binary.shape[0]} individuals x {binary.shape[1]} SNPs")
     return maf_values, binary
